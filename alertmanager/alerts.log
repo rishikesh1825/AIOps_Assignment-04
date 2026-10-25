@@ -1,0 +1,8 @@
+[2026-10-25 20:03:08] channel=warning  FIRING   HostLowDiskSpace severity=warning instance=localhost:9100 | Root filesystem below 10% free
+[2026-10-25 20:13:51] channel=warning  FIRING   HighImageFailureRate severity=warning instance=- | More than 20% of images are failing
+[2026-10-25 20:14:51] channel=warning  RESOLVED HighImageFailureRate severity=warning instance=- | More than 20% of images are failing
+[2026-10-25 20:33:08] channel=warning  FIRING   HostLowDiskSpace severity=warning instance=localhost:9100 | Root filesystem below 10% free
+[2026-10-25 21:03:09] channel=warning  FIRING   HostLowDiskSpace severity=warning instance=localhost:9100 | Root filesystem below 10% free
+[2026-10-25 21:33:09] channel=warning  FIRING   HostLowDiskSpace severity=warning instance=localhost:9100 | Root filesystem below 10% free
+[2026-10-25 22:03:09] channel=warning  FIRING   HostLowDiskSpace severity=warning instance=localhost:9100 | Root filesystem below 10% free
+[2026-10-25 22:33:09] channel=warning  FIRING   HostLowDiskSpace severity=warning instance=localhost:9100 | Root filesystem below 10% free

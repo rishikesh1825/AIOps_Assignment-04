@@ -1,0 +1,128 @@
+# alert_rules.yml - alerting rules for the captioning app and its host.
+# Loaded by prometheus.yml (rule_files). View live state at http://localhost:9090/alerts
+#
+# AI attribution: the PromQL expressions below were generated with Claude (Anthropic).
+# Each rule carries the request used and a hand-worked explanation of its logic.
+
+groups:
+  # ------------------------------------------------------------------------- #
+  - name: caption_app
+    rules:
+      # Prompt: "Alert when the caption app's metrics endpoint can't be scraped for 30s."
+      # Logic: Prometheus sets up{job=...} = 1 on a successful scrape, 0 on failure.
+      - alert: CaptionAppDown
+        expr: up{job="caption_app"} == 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Caption app is down"
+          description: "Prometheus could not scrape {{ $labels.instance }} for 30 seconds."
+
+      # Prompt: "Alert when the model is not loaded for over a minute."
+      # Logic: imgcap_model_loaded is a gauge set to 1 after a successful load.
+      - alert: CaptionModelNotLoaded
+        expr: imgcap_model_loaded == 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Captioning model is not loaded"
+          description: "The app is running but the BLIP model has not loaded for 1 minute."
+
+      # Prompt: "Alert when p95 inference latency from a histogram exceeds 2 seconds."
+      # Threshold: measured p95 on this machine is ~0.9 s, so 2 s (~2x normal) means real degradation.
+      # Logic: rate(..._bucket[2m]) = per-second growth of each bucket's cumulative count;
+      #   sum by (le) merges the single/bulk series; histogram_quantile(0.95, ...) finds
+      #   the bucket boundary below which 95% of observations fall and interpolates
+      #   linearly inside that bucket.
+      - alert: HighInferenceLatencyP95
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le) (rate(imgcap_inference_latency_seconds_bucket[2m]))
+          ) > 2
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "p95 inference latency above 2s"
+          description: "p95 latency is {{ $value | humanizeDuration }} over the last 2 minutes."
+
+      # Prompt: "Alert when more than 20% of processed images fail over 2 minutes."
+      # Logic: failed images per second / all images per second = failure ratio.
+      #   Example: 3 failed + 12 ok in 2m -> 3/15 = 0.2.
+      #   "> 0" guard on the denominator avoids division by zero when idle.
+      - alert: HighImageFailureRate
+        expr: |
+          sum(rate(imgcap_images_processed_total{status="failed"}[2m]))
+            /
+          sum(rate(imgcap_images_processed_total[2m])) > 0.2
+          and sum(rate(imgcap_images_processed_total[2m])) > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "More than 20% of images are failing"
+          description: "Failure ratio is {{ $value | humanizePercentage }} over the last 2 minutes."
+
+      # Prompt: "Alert when the app process uses more than 3 GB of RAM."
+      # Logic: plain gauge comparison against 3 * 1024^3 bytes.
+      - alert: CaptionAppHighMemory
+        expr: imgcap_process_memory_rss_bytes > 3 * 1024 * 1024 * 1024
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Caption app memory above 3 GB"
+          description: "RSS is {{ $value | humanize1024 }}B."
+
+  # ------------------------------------------------------------------------- #
+  - name: host
+    rules:
+      # Prompt: "Alert when node_exporter is down."
+      - alert: NodeExporterDown
+        expr: up{job="node"} == 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "node_exporter is down"
+          description: "System metrics are not being collected from {{ $labels.instance }}."
+
+      # Prompt: "Alert when host CPU usage is above 90% for 2 minutes, using node_exporter."
+      # Logic: node_cpu_seconds_total{mode="idle"} grows by ~1 s per second per core when idle.
+      #   rate(...[1m]) gives the idle fraction per core; avg across cores; 1 - idle = busy.
+      #   Example: avg idle 0.08 -> (1 - 0.08) * 100 = 92%.
+      - alert: HostHighCpu
+        expr: (1 - avg(rate(node_cpu_seconds_total{mode="idle"}[1m]))) * 100 > 90
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Host CPU above 90%"
+          description: "CPU usage is {{ $value | printf \"%.0f\" }}% for 2 minutes."
+
+      # Prompt: "Alert when available memory falls below 10%."
+      # Logic: MemAvailable / MemTotal = fraction still available to new processes.
+      - alert: HostLowMemory
+        expr: node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes < 0.10
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Host memory almost exhausted"
+          description: "Only {{ $value | humanizePercentage }} of RAM is available."
+
+      # Prompt: "Alert when the root filesystem has less than 10% free space, excluding tmpfs."
+      # Logic: avail / size on mountpoint "/" ; the fstype regex drops in-memory filesystems.
+      - alert: HostLowDiskSpace
+        expr: |
+          node_filesystem_avail_bytes{mountpoint="/", fstype!~"tmpfs|overlay|squashfs"}
+            /
+          node_filesystem_size_bytes{mountpoint="/", fstype!~"tmpfs|overlay|squashfs"} < 0.10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Root filesystem below 10% free"
+          description: "{{ $value | humanizePercentage }} free on /."

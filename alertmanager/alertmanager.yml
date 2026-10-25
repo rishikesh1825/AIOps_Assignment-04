@@ -1,0 +1,45 @@
+# alertmanager.yml - routes alerts fired by Prometheus (prometheus/alert_rules.yml).
+#
+# Pipeline:  Prometheus rule fires -> Alertmanager groups / routes / inhibits
+#            -> webhook receiver (alert_receiver.py) logs the notification.
+#
+# Run from the repo root:
+#   alertmanager --config.file=alertmanager/alertmanager.yml --storage.path=alertmanager/data
+# UI: http://localhost:9093
+#
+# AI attribution: drafted with Claude (Anthropic). Request used (from the chat):
+#   "Write an alertmanager.yml that routes critical and warning alerts to separate local
+#    webhook receivers, groups by alertname, and suppresses dependent alerts when a target is down."
+
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: warnings                 # default for anything not matched below
+  group_by: ["alertname", "job"]     # one notification per alert type per job
+  group_wait: 10s                    # wait to batch alerts that fire together
+  group_interval: 1m                 # minimum gap between updates for a group
+  repeat_interval: 30m               # re-notify while an alert keeps firing
+  routes:
+    - matchers: ['severity="critical"']
+      receiver: critical
+      group_wait: 5s                 # page faster for critical alerts
+      repeat_interval: 10m
+
+receivers:
+  - name: critical
+    webhook_configs:
+      - url: "http://localhost:5001/critical"
+        send_resolved: true
+  - name: warnings
+    webhook_configs:
+      - url: "http://localhost:5001/warning"
+        send_resolved: true
+
+inhibit_rules:
+  # If the app itself is down, its model/latency/failure alerts are noise - mute them.
+  - source_matchers: ['alertname="CaptionAppDown"']
+    target_matchers: ['alertname=~"CaptionModelNotLoaded|HighInferenceLatencyP95|HighImageFailureRate|CaptionAppHighMemory"']
+  # If node_exporter is down, host alerts cannot be trusted - mute them.
+  - source_matchers: ['alertname="NodeExporterDown"']
+    target_matchers: ['alertname=~"HostHighCpu|HostLowMemory|HostLowDiskSpace"']

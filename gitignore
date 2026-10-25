@@ -1,0 +1,18 @@
+.venv/
+__pycache__/
+*.pyc
+
+# Keep the repo light: commit only the small demo ZIPs, not the full image set
+sample_data/images/
+sample_data/*_large.zip
+
+# Prometheus / Grafana local data
+data/
+*.db
+
+# Recordings (upload the video separately if it is large)
+*.mp4
+*.webm
+
+# Alertmanager local state
+alertmanager/data/

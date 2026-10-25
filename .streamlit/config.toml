@@ -1,0 +1,6 @@
+[server]
+maxUploadSize = 200        # MB, enough for a large ZIP of images
+runOnSave = false
+
+[browser]
+gatherUsageStats = false

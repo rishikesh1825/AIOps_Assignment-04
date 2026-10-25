@@ -1,0 +1,48 @@
+# prometheus.yml - DA3408 A4: scrape the captioning app, node_exporter and Prometheus itself.
+#
+# Run from the repo root:
+#   prometheus --config.file=prometheus/prometheus.yml
+# (rule_files paths below are resolved relative to this file's directory)
+#
+# AI attribution: this file was drafted with Claude (Anthropic). Request used (from the chat):
+#   "Write a prometheus.yml that scrapes a Streamlit app's metrics on port 8001 and
+#    node_exporter on port 9100 every 5 seconds, and loads an alert rules file."
+
+global:
+  scrape_interval: 5s        # matches the 5-second Grafana refresh required for the demo
+  scrape_timeout: 4s         # must be shorter than scrape_interval
+  evaluation_interval: 5s    # how often alert rules are evaluated
+  external_labels:
+    project: da3408-a4
+
+rule_files:
+  - alert_rules.yml
+
+# Where firing alerts are sent (alertmanager/alertmanager.yml handles routing).
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["localhost:9093"]
+
+scrape_configs:
+  # Prometheus monitoring itself
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # Application metrics from prometheus_client (start_http_server in metrics.py)
+  - job_name: caption_app
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["localhost:8001"]
+        labels:
+          app: image-captioning
+          env: dev
+          tier: application
+
+  # System metrics: CPU / RAM / disk / network from node_exporter
+  - job_name: node
+    static_configs:
+      - targets: ["localhost:9100"]
+        labels:
+          tier: infrastructure
